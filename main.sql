@@ -72,3 +72,43 @@ end;
 $$ LANGUAGE plpgsql;
 
 ------------------------------------------------------------------------------------------------------------
+
+
+"The timestamp of the first unsuccessful pickup should be after the submission_time of the 
+corresponding delivery request. In addition, each unsuccessful pickup’s timestamp should be after the 
+previous unsuccessful pickup’s timestamp (if any)."
+
+CREATE TRIGGER check_pickup_timestamp_trigger
+BEFORE INSERT ON unsuccessful_pickups
+FOR EACH ROW EXECUTE FUNCTION check_pickup_timestamp_func();
+
+CREATE OR REPLACE FUNCTION check_pickup_timestamp_func()
+AS $$
+DECLARE delivery_request_timestamp TIMESTAMP;
+DECLARE first_unsucc_pickup_timestamp TIMESTAMP;
+DECLARE last_unsucc_pickup_timestamp TIMESTAMP;
+begin
+    SELECT d.submission_time into delivery_request_timestamp
+    FROM delivery_request d
+    WHERE NEW.request_id = d.id;
+
+    SELECT MIN(pickup_time) INTO first_unsucc_pickup_timestamp
+    FROM unsuccessful_pickups u 
+    WHERE u.request_id = NEW.request_id;
+
+    SELECT MAX(pickup_time) INTO first_unsucc_pickup_timestamp
+    FROM unsuccessful_pickups u 
+    WHERE u.request_id = NEW.request_id;
+
+    if (first_unsucc_pickup_timestamp < delivery_request_timestamp) then
+        RAISE EXCEPTION 'The timestamp of the first unsuccessful pickup should be after the submission_time of the 
+            corresponding delivery request';
+        return NULL;
+    end if;
+    if (NEW.pickup_time < last_unsucc_pickup_timestamp) then
+    RAISE EXCEPTION 'Each unsuccessful pickup’s timestamp should be after the previous unsuccessful pickup’s timestamp';
+        return NULL;
+    end if;
+    return NEW;
+end;
+$$ LANGUAGE plpgsql;
