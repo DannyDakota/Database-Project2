@@ -1,6 +1,6 @@
 --------------------------------------------------------Delivery_requests related-----------------------------------------------------
 
---Each delivery request has at least one package
+-- (1) Each delivery request has at least one package
 
 CREATE TRIGGER req_has_package
 BEFORE INSERT ON delivery_requests
@@ -9,18 +9,18 @@ FOR EACH ROW EXECUTE FUNCTION check_packages_func();
 CREATE OR REPLACE FUNCTION check_packages_func() RETURNS TRIGGER
 AS $$
 begin
-  if NOT EXISTS (SELECT 1 FROM packages p WHERE p.request_id = NEW.id) then
+  IF NOT EXISTS (SELECT 1 FROM packages p WHERE p.request_id = NEW.id) then
     RAISE EXCEPTION 'Each delivery request must have at least one package';
     RETURN NULL;
   else
     RETURN NEW;
-  end if; 
+  END IF; 
 end;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------Package related---------------------------------------------------------------
 
---For each delivery request, the IDs of the packages should be consecutive integers starting from 1.
+-- (2) For each delivery request, the IDs of the packages should be consecutive integers starting from 1.
 
 CREATE TRIGGER check_consecutive
 BEFORE INSERT ON delivery_requests
@@ -33,13 +33,13 @@ begin
     SELECT MAX(p.package_id) INTO max_package_id
     FROM packages p
     WHERE p.request_id = NEW.id;
-    if max_package_id IS NOT NULL AND (max_package_id != COALESCE(NEW.package_id, 0) - 1) then
+    IF max_package_id IS NOT NULL AND (max_package_id != COALESCE(NEW.package_id, 0) - 1) then
         RAISE EXCEPTION 'IDs of the packages should be consecutive integers starting from 1';
         RETURN NULL;
-    end if;
-    if max_package_id IS NULL AND NEW.package_id IS NULL then
+    END IF;
+    IF max_package_id IS NULL AND NEW.package_id IS NULL then
         NEW.package_id := 1;
-    end if;
+    END IF;
     RETURN NEW;
 end;
 $$ LANGUAGE plpgsql;
@@ -47,7 +47,7 @@ $$ LANGUAGE plpgsql;
 
 ------------------------------------------------------Unsuccessful_pickups related------------------------------------------------
 
---For each delivery request, the IDs of the unsuccessful pickups should be consecutive integers starting from 1.
+-- (3) For each delivery request, the IDs of the unsuccessful pickups should be consecutive integers starting from 1.
 
 CREATE TRIGGER check_pickup_trigger
 BEFORE INSERT ON unsuccessful_pickups
@@ -60,20 +60,20 @@ begin
     SELECT MAX(pickup_id) INTO max_unsucc_pickup_id
     FROM unsuccessful_pickups u
     WHERE u.request_id =  NEW.request_id;
-    if max_unsucc_pickup_id IS NOT NULL AND (max_unsucc_pickup_id != COALESCE(NEW.pickup_id,0) - 1) THEN
+    IF max_unsucc_pickup_id IS NOT NULL AND (max_unsucc_pickup_id != COALESCE(NEW.pickup_id,0) - 1) THEN
         RAISE EXCEPTION 'the IDs of the unsuccessful pickups should be consecutive integers starting from 1';
         RETURN NULL;
-    end if;
-    if max_unsucc_pickup_id IS NULL AND NEW.pickup_id IS NULL then
+    END IF;
+    IF max_unsucc_pickup_id IS NULL AND NEW.pickup_id IS NULL then
         NEW.pickup_id := 1;
-    end if;
+    END IF;
     RETURN NEW;
 end;
 $$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------------------
 
-/*The timestamp of the first unsuccessful pickup should be after the submission_time of the 
+/* (4) The timestamp of the first unsuccessful pickup should be after the submission_time of the 
 corresponding delivery request. In addition, each unsuccessful pickup’s timestamp should be after the 
 previous unsuccessful pickup’s timestamp (if any).*/
 
@@ -99,22 +99,22 @@ begin
     FROM unsuccessful_pickups u 
     WHERE u.request_id = NEW.request_id;
 
-    if (first_unsucc_pickup_timestamp < delivery_request_timestamp) then
+    IF (first_unsucc_pickup_timestamp < delivery_request_timestamp) then
         RAISE EXCEPTION 'The timestamp of the first unsuccessful pickup should be after the submission_time of the 
             corresponding delivery request';
         return NULL;
-    end if;
-    if (NEW.pickup_time < last_unsucc_pickup_timestamp) then
+    END IF;
+    IF (NEW.pickup_time < last_unsucc_pickup_timestamp) then
     RAISE EXCEPTION 'Each unsuccessful pickup’s timestamp should be after the previous unsuccessful pickup’s timestamp';
         return NULL;
-    end if;
+    END IF;
     return NEW;
 end;
 $$ LANGUAGE plpgsql;
 
 ------------------------------------------------------------Legs related--------------------------------------------------------------
 
---For each delivery request, the IDs of the legs should be consecutive integers starting from 1. 
+-- (5) For each delivery request, the IDs of the legs should be consecutive integers starting from 1. 
 
 CREATE TRIGGER check_legs_ID_trigger
 BEFORE INSERT ON legs
@@ -141,7 +141,7 @@ $$ LANGUAGE plpgsql;
 
 -------------------------------------------------------------------------------------------------------------------------------------
 
-/*For  each  delivery  request,  the  start  time  of  the  first  leg  should  be  after  the  submission_time  of  the  
+/* (6) For  each  delivery  request,  the  start  time  of  the  first  leg  should  be  after  the  submission_time  of  the  
 delivery request and the timestamp of the last unsuccessful pickup (if any). */
 
 CREATE TRIGGER check_first_leg_start_time_trigger
@@ -174,7 +174,7 @@ $$ LANGUAGE plpgsql;
 
 ---------------------------------------------------------------------------------------------------------------------------------------------
 
-/*For each delivery request, a new leg cannot be inserted if its start_time is before the end_time of the 
+/* (7) For each delivery request, a new leg cannot be inserted if its start_time is before the end_time of the 
 previous leg, or if the end_time of the previous leg is NULL.*/
 
 CREATE TRIGGER check_legs_start_time_trigger
@@ -194,17 +194,17 @@ BEGIN
     IF end_time is NULL THEN
         RAISE EXCEPTION 'A new leg cannot be inserted if end time of previous leg cannot be null.';
         RETURN NULL;
-    ELSEIF NEW.start_time < previous_leg_end_time THEN
+    ELSE NEW.start_time < previous_leg_end_time THEN
         RAISE EXCEPTION 'A new leg cannot be inserted if it is before the end time of previous leg.';
         RETURN NULL;
-    ENDIF;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 ---------------------------------------------------------------Unsuccessful_deliveries----------------------------------------------------------------------
 
-/*The timestamp of each unsuccessful_delivery should be after the start_time of the corresponding leg.*/
+/* (8) The timestamp of each unsuccessful_delivery should be after the start_time of the corresponding leg.*/
 
 CREATE TRIGGER check_unsuccessful_delivery_timestamp_trigger
 BEFORE INSERT ON unsuccessful_deliveries
@@ -222,13 +222,13 @@ BEGIN
     IF NEW.attempt_time <= leg_start_time THEN
         RAISE EXCEPTION 'The timestamp of each unsuccessful delivery should be after the start time of the corresponding leg.';
         RETURN NULL;
-    ENDIF;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 -------------------------------------------------------------------------------------------------------------------------------------
-/*For each delivery request, there can be at most three unsuccessful_deliveries.*/
+/* (9) For each delivery request, there can be at most three unsuccessful_deliveries.*/
 
 CREATE TRIGGER check_num_of_unsuccessful_deliveries_trigger
 BEFORE INSERT ON unsuccessful_deliveries
@@ -245,14 +245,14 @@ BEGIN
     IF curr_num_of_unsuccessful_deliveries >= 3 THEN
         RAISE EXCEPTION 'For each delivery request, there can be at most three unsuccessful_deliveries.';
         RETURN NULL;
-    ENDIF;
+    END IF
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 ------------------------------------------------------------Cancelled_requests related-----------------------------------------------
 
-/*The cancel time of a cancelled request should be after the submission time of the corresponding delivery request.*/
+/* (10) The cancel time of a cancelled request should be after the submission time of the corresponding delivery request.*/
 
 CREATE TRIGGER check_cancel_time_of_cancelled_request_trigger
 BEFORE INSERT ON cancelled_requests
@@ -270,28 +270,107 @@ BEGIN
         RAISE EXCEPTION 'The cancel time of a cancelled request should be after the submission time of the corresponding  
             delivery request.'
         RETURN NULL;
-    ENDIF;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 -------------------------------------------------------------Return_legs related---------------------------------------------------------------------
 
-/*For each delivery request, the first return_leg’s ID should 1, the second return_leg’s ID should be 2, and so on.*/
+/* (11) For each delivery request, the first return_leg’s ID should 1, the second return_leg’s ID should be 2, and so on.*/
+
+CREATE TRIGGER check_return_leg_id_trigger
+BEFORE INSERT ON return_legs
+FOR EACH ROW EXECUTE FUNCTION check_return_leg_id_func();
+
+CREATE OR REPLACE FUNCTION check_return_leg_id_func()
+AS $$
+DECLARE current_leg_id_count NUMERIC;
+DECLARE correct_leg_id_count NUMERIC;
+BEGIN
+    SELECT MAX(leg_id) INTO current_leg_id_count
+    FROM return_legs l
+    WHERE l.request_id = NEW.request_id;
+    IF current_leg_id_count IS NULL AND NEW.leg_id = 1 THEN
+        RETURN NEW;
+    ELSIF current_leg_id_count IS NOT NULL AND (NEW.LEG_ID = current_leg_id_count + 1)then
+        RETURN NEW;
+    ELSE
+        RETURN NULL;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 
 -------------------------------------------------------------------------------------------------------------------------------------
 
-/*For a delivery request, the first return_leg cannot be inserted if (i) there is no existing leg for the delivery 
+/* (12) For a delivery request, the first return_leg cannot be inserted if (i) there is no existing leg for the delivery 
 request or (ii) the last existing leg’s end_time is after the start_time of the return_leg. In addition, the 
 return_leg’s start_time should be after the cancel_time of the request (if any). */
 
+CREATE TRIGGER check_return_leg_insertion_trigger
+BEFORE INSERT ON return_legs
+FOR EACH ROW EXECUTE FUNCTION check_return_leg_insertion_func();
+
+CREATE OR REPLACE FUNCTION check_return_leg_insertion_func();
+AS $$
+DECLARE last_leg_timestamp TIMESTAMP;
+DECLARE cancel_time_timestamp TIMESTAMP;
+BEGIN
+    -- TODO: Check if this applies to the second return_leg as well
+    IF NOT EXISTS (SELECT * FROM legs l WHERE NEW.request_id = l.request_id) THEN
+        RAISE EXCEPTION "The first return_leg cannot be inserted if (i) there is no existing leg for the delivery 
+request";
+        RETURN NULL;
+    END IF;
+    -- TODO: Check if MAX(end_time) is correct, note that endtime can be null
+    SELECT MAX(end_time) INTO last_leg_timestamp
+    FROM legs l
+    WHERE l.request_id = NEW.request_id;
+    IF last_leg_timestamp > NEW.start_time THEN 
+        RAISE EXCEPTION "Last existing leg’s end_time should not be after the start_time of the return_leg";
+        RETURN NULL;
+    END IF;
+    
+    SELECT cancel_time INTO cancel_time_timestamp
+    FROM cancelled_requests cr
+    WHERE cr.id = NEW.request_id;
+
+    IF cancel_time_timestamp NOT NULL AND cancel_time_timestamp > NEW.start_time THEN
+        RAISE EXCEPTION "Return leg's start time should be after cancel_time";
+        RETURN NULL;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -------------------------------------------------------------------------------------------------------------------------------------
 
-/*For each delivery request, there can be at most three unsuccessful_return_deliveries*/
+/* (13) For each delivery request, there can be at most three unsuccessful_return_deliveries*/
+CREATE TRIGGER check_no_of_unsucc_return_deliv_trigger
+BEFORE INSERT ON unsuccessful_return_deliveries
+FOR EACH ROW EXECUTE check_no_of_unsucc_return_deliv_func();
+
+CREATE OR REPLACE FUNCTION check_no_of_unsucc_return_deliv_func()
+AS $$
+DECLARE no_of_unsuccess NUMERIC;
+BEGIN
+    SELECT COUNT(*) INTO no_of_unsuccess
+    FROM unsuccessful_return_deliveries u
+    WHERE new.request_id = u.request_id;
+
+    IF no_of_unsuccess > 2 THEN
+        RAISE EXCEPTION 'Can only be at most three unsuccessful_return_deliveries';
+        RETURN NULL;
+    END IF;
+    RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
 
 ---------------------------------------------------------Unsuccessful_return_deliveries related--------------------------------------------------------
 
-/*The timestamp of each unsuccessful_return_delivery should be after the start_time of the 
+/* (14) The timestamp of each unsuccessful_return_delivery should be after the start_time of the 
 corresponding return_leg. */
 
 CREATE TRIGGER check_unsuccessful_return_delivery_timestamp_trigger
@@ -310,7 +389,7 @@ BEGIN
         RAISE EXCEPTION 'The timestamp of each unsuccessful_return_delivery should be after the start_time of the 
             corresponding return_leg.'
         RETURN NULL;
-    ENDIF;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
