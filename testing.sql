@@ -122,21 +122,38 @@ INSERT INTO Facilities (address, postal) VALUES ('facility address 5', '123163')
 CALL submit_request('1', '1', 'pickup_address', '123456', 'recipient_name', 'recipient_addr',
   '654321', '2016-06-22 19:10:25-07', '2', ARRAY[2, 2], ARRAY[2, 2], ARRAY[2, 2],
   ARRAY[2, 2], ARRAY['Content 1', 'Content 2'], ARRAY[2, 2]);
+ 
+--- Trigger 2
 
 --- [POSITIVE] Test that a consecutive package_id for the same delivery_request works
 INSERT INTO packages VALUES (3, 3, 12.5, 6.5, 10.2, 3.8, 'Pants', 50.0, 12.5, 6.5, 10.2, 3.8);
+delete from packages where request_id = 3;
+INSERT INTO packages VALUES (3, 0, 12.5, 6.5, 10.2, 3.8, 'Pants', 50.0, 12.5, 6.5, 10.2, 3.8);
+
 
 --- [NEGATIVE] Test that a non-consecutive package_id for the same delivery_request raises exception
 INSERT INTO packages VALUES (3, 5, 12.5, 6.5, 10.2, 3.8, 'Pants', 50.0, 12.5, 6.5, 10.2, 3.8);
 
+--- Trigger 1
+
 --- [NEGATIVE] Test that a delivery_request with missing package raises exception
 INSERT INTO delivery_requests VALUES (1, 3, 1, 'completed', '123 Main St', '12345', 'John Doe', '456 Elm St', '67890', '2023-04-08 03:00:00', '2023-04-12', 3, 50.00);
+
+
+--- Trigger 3
+
 
 --- [POSITIVE] Test that a consecutive ID for an unsuccessful pickup works
 INSERT INTO accepted_requests VALUES(3, '333', '2022-04-11 03:00:00', 4);
 INSERT INTO unsuccessful_pickups VALUES(3, 1, 5, '2022-04-11 03:00:00', 'fail');
 
+--- [NEGATIVE]
+delete from unsuccessful_pickups where request_id = 3;
+INSERT INTO unsuccessful_pickups (request_id, pickup_id, handler_id, pickup_time, reason) VALUES (3, 0, 2, '2023-04-01 00:00:00-07', 'traffic jam');
+
+
 --- [NEGATIVE] Test that a non-consecutive ID for an unsuccessful pickup raises exception
+delete from unsuccessful_pickups where request_id = 3;
 INSERT INTO unsuccessful_pickups VALUES(3, 3, 5, '2022-04-11 03:00:00', 'fail');
 
 
@@ -151,19 +168,22 @@ insert into unsuccessful_pickups values(3, 2, 5, '2016-06-22 19:10:25.002', 'fai
 
 --- [NEGATIVE] Test that the timestamp of the first unsuccessful pickup is before the submission_time and raises exception
 delete from unsuccessful_pickups where request_id = 3;
-insert into unsuccessful_pickups values(3, 1, 5, '2016-06-22 19:10:24.000', 'fail');
+insert into unsuccessful_pickups values(3, 1, 5, '2015-04-02 04:00:000', 'fail');
 
 --- [NEGATIVE] Test that the timestamp of the first unsuccessful pickup is after the submission_time and subsequent pickup time are before the prev and raises an exception
 delete from unsuccessful_pickups where request_id = 3;
-insert into unsuccessful_pickups values(3, 1, 5, '2016-06-22 19:10:25.007', 'fail');
-insert into unsuccessful_pickups values(3, 2, 5, '2016-06-22 19:10:24.003', 'fail');
+insert into unsuccessful_pickups values(3, null, 5, '2023-04-02 04:00:00', 'fail');
+insert into unsuccessful_pickups values(3, 2, 5, '2023-04-03 04:00:00', 'fail');
+insert into unsuccessful_pickups values(3, 3, 5, '2023-04-03 03:00:00', 'fail');
 
 
 --- [POSITIVE] Test that a consecutive id for legs for the same delivery_request works
+delete from legs where request_id = 3;
 INSERT INTO legs VALUES(3, 1, 2, '2023-04-18 10:00:00', '2023-04-18 10:35:00', 1); --(CUST,1)
 
 --- [NEGATIVE] Test that a non-consecutive id for legs for the same delivery_request raises an exception
-INSERT INTO legs VALUES(3, 2, 2, '2023-04-18 10:00:00', '2023-04-18 10:35:00', 1); --(CUST,1)
+delete from legs where request_id = 3;
+INSERT INTO legs VALUES(3, 1, 2, '2023-04-18 10:00:00', '2023-04-18 10:35:00', 1); --(CUST,1)
 
 --- [POSITIVE] Test that the timestamp of the first leg is after the submission_time and it works
 delete from legs where request_id = 3;
@@ -179,7 +199,7 @@ INSERT INTO legs VALUES(3, 1, 2, '2016-06-22 19:10:24.000', '2023-04-18 10:35:00
 
 --- [NEGATIVE] Test that the timestamp of the first unsuccessful pickup is after the submission_time and start_time is before last_unsuccessful_pickup and raise an exception
 delete from legs where request_id = 3;
-INSERT INTO legs VALUES(3, 1, 2, '2016-06-22 19:10:25.005', '2023-04-18 10:35:00', 1); --(CUST,1)
+INSERT INTO legs VALUES(3, 1, 2, '2023-04-03 03:00:00.000', '2023-04-18 10:35:00', 1); --(CUST,1)
 
 
 --- Test for trigger 7
@@ -273,10 +293,10 @@ INSERT INTO return_legs VALUES(3, 1, 2, '2021-04-10 10:05:06', 1, '2021-04-24 10
 delete from unsuccessful_return_deliveries where request_id = 3;
 delete from return_legs where request_id = 3;
 delete from legs where request_id = 3;
-INSERT INTO legs VALUES(3, 1, 2, '2022-04-18 10:00:00', '2022-04-18 10:35:00', 1);
-INSERT INTO legs VALUES(3, 2, 2, '2022-04-18 10:40:00', '2022-04-18 10:35:00', 1);
-INSERT INTO legs VALUES(3, 3, 2, '2022-04-18 10:41:00', '2022-04-18 10:35:00', 1);
-INSERT INTO legs VALUES(3, 4, 2, '2022-04-18 10:42:00', '2022-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 1, 2, '2023-04-18 10:00:00', '2022-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 2, 2, '2023-04-18 10:40:00', '2022-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 3, 2, '2023-04-18 10:41:00', '2022-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 4, 2, '2023-04-18 10:42:00', '2022-04-18 10:35:00', 1);
 INSERT INTO return_legs VALUES(3, 1, 2, '2023-04-10 10:05:06', 1, '2023-04-24 10:35:06');
 INSERT INTO return_legs VALUES(3, 2, 2, '2023-04-10 10:05:06', 1, '2023-04-24 10:35:06');
 INSERT INTO return_legs VALUES(3, 3, 2, '2023-04-10 10:05:06', 1, '2023-04-24 10:35:06');
@@ -293,4 +313,6 @@ insert into unsuccessful_return_deliveries values (3, 1, 'toh', '2023-04-24 10:0
 
 --- [NEGATIVE] Timestamp of each unsuccessful_return_delivery before the start_time of the corresponding return_leg and raises exception
 delete from unsuccessful_deliveries where request_id = 3;
-insert into unsuccessful_return_deliveries values (3, 1, 'toh', '2023-04-24 10:00:00.000');
+insert into unsuccessful_return_deliveries values (3, 1, 'toh', '2023-04-09 10:00:00.000');
+
+
