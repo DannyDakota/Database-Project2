@@ -14,12 +14,12 @@ begin
 end;
 $$ LANGUAGE plpgsql;
 
-CREATE CONSTRAINT TRIGGER req_has_package
+CREATE CONSTRAINT TRIGGER req_has_package_trigger
 after INSERT ON delivery_requests
 deferrable initially deferred
 FOR EACH ROW EXECUTE FUNCTION check_packages_func();
 
-CREATE OR REPLACE FUNCTION delivery_request_one_package_dr_func() 
+CREATE OR REPLACE FUNCTION delivery_request_package_func() 
 RETURNS TRIGGER AS $$ 
 BEGIN 
 IF NOT EXISTS (
@@ -37,10 +37,10 @@ RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE CONSTRAINT TRIGGER delivery_request_one_package_dr_check
+CREATE CONSTRAINT TRIGGER delivery_request_package_trigger
 AFTER INSERT ON delivery_requests 
 DEFERRABLE INITIALLY DEFERRED 
-FOR EACH ROW EXECUTE FUNCTION delivery_request_one_package_dr_func();
+FOR EACH ROW EXECUTE FUNCTION delivery_request_package_func();
 
 --------------------------------------------------------Package related---------------------------------------------------------------
 
@@ -63,7 +63,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER check_consecutive
+CREATE OR REPLACE TRIGGER check_consecutive_trigger
 BEFORE INSERT ON packages
 FOR EACH ROW EXECUTE FUNCTION check_consecutive_func();
 
@@ -341,13 +341,11 @@ returns trigger AS $$
 DECLARE last_leg_timestamp TIMESTAMP;
 DECLARE cancel_time_timestamp TIMESTAMP;
 BEGIN
-    -- TODO: Check if this applies to the second return_leg as well
     IF NOT EXISTS (SELECT * FROM legs l WHERE NEW.request_id = l.request_id) THEN
         RAISE EXCEPTION 'The first return_leg cannot be inserted if (i) there is no existing leg for the delivery 
 request';
         RETURN NULL;
     END IF;
-    -- TODO: Check if MAX(end_time) is correct, note that endtime can be null
     SELECT COALESCE(MAX(end_time),'1900-01-01 00:00:00')  INTO last_leg_timestamp
     FROM legs l
     WHERE l.request_id = NEW.request_id;
