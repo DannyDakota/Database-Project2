@@ -55,11 +55,10 @@ BEGIN
     max_id := max_id + 1;
     IF (NEW.package_id = max_id) THEN
         RETURN NEW;
-    ELSEIF (max_id is NULL) THEN
-        NEW.package_id := 1;
+    ELSEIF (max_id is null and new.package_id = 1) THEN
         RETURN NEW;
     END IF;
-    RAISE EXCEPTION 'The IDs of the packages should be consecutive integers';
+    RAISE EXCEPTION 'The IDs of the packages should be consecutive integers starting from 1';
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
@@ -130,6 +129,10 @@ begin
 end;
 $$ LANGUAGE plpgsql;
 
+create or replace trigger check_pickup_timestamp_trigger
+before insert on unsuccessful_pickups
+for each row execute function check_pickup_timestamp_func();
+
 
 ------------------------------------------------------------Legs related--------------------------------------------------------------
 
@@ -145,11 +148,11 @@ BEGIN
     max_id := max_id + 1;
     IF (NEW.leg_id = max_id) THEN
         RETURN NEW;
-    ELSEIF (max_id is NULL) THEN
-        NEW.leg_id := 1;
+    end if;
+    IF ((max_id is null and new.leg_id = 1)) THEN
         RETURN NEW;
     END IF;
-    RAISE EXCEPTION 'The IDs of the legs should be consecutive integers';
+    RAISE EXCEPTION 'The IDs of the legs should be consecutive integers starting from 1';
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
@@ -174,7 +177,7 @@ BEGIN
     INTO request_submission_time
     WHERE id = NEW.request_id;
 
-    SELECT pickup_time FROM unsuccessful_pickups
+    SELECT max(pickup_time) FROM unsuccessful_pickups
     INTO unsuccessful_pickup_timestamp
     WHERE request_id = NEW.request_id;
 
@@ -400,15 +403,15 @@ FOR EACH ROW EXECUTE function check_no_of_unsucc_return_deliv_func();
 corresponding return_leg. */
 
 CREATE OR REPLACE FUNCTION check_unsuccessful_return_delivery_timestamp_func()
-AS $$
-DECLARE corr_return_leg_start_time TIMESTAMP
+returns trigger AS $$
+DECLARE corr_return_leg_start_time TIMESTAMP;
 BEGIN
     SELECT start_time FROM legs INTO corr_return_leg_start_time
     WHERE leg_id = NEW.leg_id;
 
     IF NEW.attempt_time <= corr_return_leg_start_time THEN
         RAISE EXCEPTION 'The timestamp of each unsuccessful_return_delivery should be after the start_time of the 
-            corresponding return_leg.'
+            corresponding return_leg.';
         RETURN NULL;
     END IF;
     RETURN NEW;
