@@ -183,6 +183,21 @@ INSERT INTO legs VALUES(3, 1, 2, '2016-06-22 19:10:25.005', '2023-04-18 10:35:00
 
 
 --- Test for trigger 7
+--- [POSITIVE]
+delete from legs where request_id = 3;
+INSERT INTO legs VALUES(3, 1, 2, '2023-04-18 10:00:00', '2023-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 2, 2, '2023-04-18 10:40:00', '2023-04-18 10:35:00', 1);
+
+--- [NEGAIVE] Start time of each leg is before end time of previous leg.
+delete from legs where request_id = 3;
+INSERT INTO legs VALUES(3, 1, 2, '2023-04-18 10:00:00', '2023-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 2, 2, '2022-04-18 10:00:00', '2022-04-18 10:35:00', 1);
+
+--- [NEGAIVE] End time of previous leg NULL.
+delete from legs where request_id = 3;
+INSERT INTO legs VALUES(3, 1, 2, '2023-04-18 10:00:00', NULL, 1);
+INSERT INTO legs VALUES(3, 2, 2, '2022-04-18 10:00:00', '2022-04-18 10:35:00', 1);
+
 
 
 
@@ -231,11 +246,46 @@ INSERT INTO return_legs VALUES(3, 1, 2, '2023-04-24 10:05:06', 1, '2023-04-24 10
 INSERT INTO return_legs VALUES(3, 3, 2, '2023-04-24 10:05:06', 1, '2023-04-24 10:35:06');
 
 
+
 --- Trigger 12
+--- [POSITVE]
+delete from unsuccessful_return_deliveries where request_id = 3;
+delete from return_legs where request_id  = 3;
+delete from legs where request_id = 3;
+INSERT INTO legs VALUES(3, 1, 2, '2023-04-18 10:00:00', '2023-04-18 10:35:00', 1);
+INSERT INTO return_legs VALUES(3, 1, 2, '2024-04-24 10:05:06', 1, '2024-04-24 10:35:06');
+
+--- [NEGATIVE] For a delivery request, the first return_leg cannot be inserted if there is no existing leg for the delivery 
+--- request
+delete from return_legs where request_id  = 3;
+delete from legs where request_id = 3;
+INSERT INTO return_legs VALUES(3, 1, 2, '2023-04-24 10:05:06', 1, '2023-04-24 10:35:06');
+
+--- [NEGATIVE] For a delivery request, the first return_leg cannot be inserted if, the last existing leg’s end_time is after the start_time
+--- of the return_leg. In addition, the return_leg’s start_time should be after the cancel_time of the request (if any)
+delete from legs where request_id = 3;
+delete from return_legs where request_id = 3;
+INSERT INTO legs VALUES(3, 1, 2, '2022-04-18 10:00:00', '2022-04-18 10:35:00', 1);
+INSERT INTO return_legs VALUES(3, 1, 2, '2021-04-10 10:05:06', 1, '2021-04-24 10:35:06');
 
 --- Trigger 13
---- My trigger might be wrong as it perform a before insert on unsucces_return instead of return_legs
 --- [NEGATIVE] More than three unsuccessful_return_deliveries
+delete from unsuccessful_return_deliveries where request_id = 3;
+delete from return_legs where request_id = 3;
+delete from legs where request_id = 3;
+INSERT INTO legs VALUES(3, 1, 2, '2022-04-18 10:00:00', '2022-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 2, 2, '2022-04-18 10:40:00', '2022-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 3, 2, '2022-04-18 10:41:00', '2022-04-18 10:35:00', 1);
+INSERT INTO legs VALUES(3, 4, 2, '2022-04-18 10:42:00', '2022-04-18 10:35:00', 1);
+INSERT INTO return_legs VALUES(3, 1, 2, '2023-04-10 10:05:06', 1, '2023-04-24 10:35:06');
+INSERT INTO return_legs VALUES(3, 2, 2, '2023-04-10 10:05:06', 1, '2023-04-24 10:35:06');
+INSERT INTO return_legs VALUES(3, 3, 2, '2023-04-10 10:05:06', 1, '2023-04-24 10:35:06');
+INSERT INTO return_legs VALUES(3, 4, 2, '2023-04-10 10:05:06', 1, '2023-04-24 10:35:06');
+insert into unsuccessful_return_deliveries values (3, 1, 'toh', '2023-04-24 10:05:10.000');
+insert into unsuccessful_return_deliveries values (3, 2, 'toh', '2023-04-24 10:05:10.000');
+insert into unsuccessful_return_deliveries values (3, 3, 'toh', '2023-04-24 10:05:10.000');
+insert into unsuccessful_return_deliveries values (3, 4, 'toh', '2023-04-24 10:05:10.000');
+
 
 
 --- [POSITIVE] Timestamp of each unsuccessful_return_delivery should be after the start_time of the corresponding return_leg and works
@@ -244,5 +294,3 @@ insert into unsuccessful_return_deliveries values (3, 1, 'toh', '2023-04-24 10:0
 --- [NEGATIVE] Timestamp of each unsuccessful_return_delivery before the start_time of the corresponding return_leg and raises exception
 delete from unsuccessful_deliveries where request_id = 3;
 insert into unsuccessful_return_deliveries values (3, 1, 'toh', '2023-04-24 10:00:00.000');
-
-

@@ -170,7 +170,7 @@ DECLARE request_submission_time TIMESTAMP;
 DECLARE unsuccessful_pickup_timestamp TIMESTAMP;
 
 BEGIN
-    SELECT submission_time FROM delivery_request
+    SELECT submission_time FROM delivery_requests
     INTO request_submission_time
     WHERE id = NEW.request_id;
 
@@ -189,8 +189,8 @@ $$ LANGUAGE plpgsql;
 
 CREATE or replace TRIGGER check_first_leg_start_time_trigger
 BEFORE INSERT ON legs
-WHEN (NEW.leg_id = 1)
-FOR EACH ROW EXECUTE FUNCTION check_first_leg_start_time_func();
+FOR EACH ROW WHEN (NEW.leg_id = 1)
+EXECUTE FUNCTION check_first_leg_start_time_func();
 
 ---------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -199,17 +199,18 @@ previous leg, or if the end_time of the previous leg is NULL.*/
 
 
 CREATE OR REPLACE FUNCTION check_legs_start_time_func()
-AS $$
+returns trigger AS $$
 DECLARE previous_leg_end_time TIMESTAMP;
 BEGIN
     SELECT end_time FROM legs
     INTO previous_leg_end_time
-    WHERE leg_id = NEW.leg_id - 1;
+    WHERE legs.leg_id = NEW.leg_id - 1;
 
-    IF end_time is NULL THEN
+    IF (previous_leg_end_time is null) THEN
         RAISE EXCEPTION 'A new leg cannot be inserted if end time of previous leg cannot be null.';
         RETURN NULL;
-    ELSE NEW.start_time < previous_leg_end_time THEN
+    end if;
+    if (NEW.start_time < previous_leg_end_time) THEN
         RAISE EXCEPTION 'A new leg cannot be inserted if it is before the end time of previous leg.';
         RETURN NULL;
     END IF;
@@ -217,7 +218,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER check_legs_start_time_trigger
+CREATE or replace TRIGGER check_legs_start_time_trigger
 BEFORE INSERT ON legs
 FOR EACH ROW 
 WHEN (NEW.leg_id > 1)
@@ -332,23 +333,23 @@ request or (ii) the last existing leg’s end_time is after the start_time of th
 return_leg’s start_time should be after the cancel_time of the request (if any). */
 
 
-CREATE OR REPLACE FUNCTION check_return_leg_insertion_func();
-AS $$
+CREATE OR REPLACE FUNCTION check_return_leg_insertion_func()
+returns trigger AS $$
 DECLARE last_leg_timestamp TIMESTAMP;
 DECLARE cancel_time_timestamp TIMESTAMP;
 BEGIN
     -- TODO: Check if this applies to the second return_leg as well
     IF NOT EXISTS (SELECT * FROM legs l WHERE NEW.request_id = l.request_id) THEN
-        RAISE EXCEPTION "The first return_leg cannot be inserted if (i) there is no existing leg for the delivery 
-request";
+        RAISE EXCEPTION 'The first return_leg cannot be inserted if (i) there is no existing leg for the delivery 
+request';
         RETURN NULL;
     END IF;
     -- TODO: Check if MAX(end_time) is correct, note that endtime can be null
     SELECT COALESCE(MAX(end_time),'1900-01-01 00:00:00')  INTO last_leg_timestamp
     FROM legs l
     WHERE l.request_id = NEW.request_id;
-    IF last_leg_timestamp > NEW.start_time THEN 
-        RAISE EXCEPTION "Last existing leg’s end_time should not be after the start_time of the return_leg";
+    IF (last_leg_timestamp > NEW.start_time) THEN 
+        RAISE EXCEPTION 'Last existing legs end_time should not be after the start_time of the return_leg';
         RETURN NULL;
     END IF;
     
@@ -356,43 +357,42 @@ request";
     FROM cancelled_requests cr
     WHERE cr.id = NEW.request_id;
 
-    IF cancel_time_timestamp AND cancel_time_timestamp > NEW.start_time THEN
-        RAISE EXCEPTION "Return leg's start time should be after cancel_time";
+    IF (cancel_time_timestamp is not null AND cancel_time_timestamp > NEW.start_time) THEN
+        RAISE EXCEPTION 'Return legs start time should be after cancel_time';
         RETURN NULL;
     END IF;
-    
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER check_return_leg_insertion_trigger
+CREATE or replace TRIGGER check_return_leg_insertion_trigger
 BEFORE INSERT ON return_legs
-FOR EACH ROW EXECUTE FUNCTION check_return_leg_insertion_func();
+FOR EACH row WHEN(new.leg_id = 1) EXECUTE FUNCTION check_return_leg_insertion_func();
 
 -------------------------------------------------------------------------------------------------------------------------------------
 
 /* (13) For each delivery request, there can be at most three unsuccessful_return_deliveries*/
 
 CREATE OR REPLACE FUNCTION check_no_of_unsucc_return_deliv_func()
-AS $$
+returns trigger AS $$
 DECLARE no_of_unsuccess NUMERIC;
 BEGIN
     SELECT COUNT(*) INTO no_of_unsuccess
     FROM unsuccessful_return_deliveries u
     WHERE new.request_id = u.request_id;
 
-    IF no_of_unsuccess >= 3 THEN
+    IF (no_of_unsuccess >= 3) THEN
         RAISE EXCEPTION 'Can only be at most three unsuccessful_return_deliveries';
         RETURN NULL;
     END IF;
     RETURN NEW;
-END
+end;
 $$ LANGUAGE plpgsql;
 
 
-CREATE TRIGGER check_no_of_unsucc_return_deliv_trigger
+CREATE or replace TRIGGER check_no_of_unsucc_return_deliv_trigger
 BEFORE INSERT ON unsuccessful_return_deliveries
-FOR EACH ROW EXECUTE check_no_of_unsucc_return_deliv_func();
+FOR EACH ROW EXECUTE function check_no_of_unsucc_return_deliv_func();
 
 ---------------------------------------------------------Unsuccessful_return_deliveries related--------------------------------------------------------
 
@@ -419,3 +419,5 @@ CREATE TRIGGER check_unsuccessful_return_delivery_timestamp_trigger
 BEFORE INSERT ON unsuccessful_return_deliveries
 FOR EACH ROW
 EXECUTE FUNCTION check_unsuccessful_return_delivery_timestamp_func();
+
+
